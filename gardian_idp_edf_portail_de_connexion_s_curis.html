@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="fr" class="h-full bg-[#1e2124]">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GARDIAN - EDF Identity Provider (IdP)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        edfYellow: '#FFD100',
+                        edfYellowDark: '#E6A800',
+                        edfDark: '#111827',
+                        edfCard: '#2b2d31',
+                        edfGray: '#3b3e45',
+                        edfBorder: '#4b4e57',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .yellow-glow {
+            box-shadow: 0 0 25px rgba(255, 209, 0, 0.15);
+        }
+        .step-transition {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .pulse-subtle {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.8; }
+            50% { opacity: 1; filter: drop-shadow(0 0 8px rgba(255, 209, 0, 0.4)); }
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-100 antialiased selection:bg-edfYellow selection:text-black">
+
+    <!-- En-tête Sécurité GARDIAN -->
+    <header class="bg-[#181a1d] border-b border-edfBorder/60 py-3 px-4 md:px-8">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <!-- Logo EDF / GARDIAN Badge -->
+                <div class="bg-edfYellow text-black font-extrabold px-3 py-1 rounded text-sm tracking-wider flex items-center gap-1.5 shadow-md">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-black"></i>
+                    <span>EDF</span>
+                </div>
+                <div class="h-4 w-[1px] bg-edfBorder"></div>
+                <span class="text-xs md:text-sm font-semibold tracking-wide text-slate-300 flex items-center gap-2">
+                    GARDIAN <span class="hidden md:inline text-xs font-normal text-slate-400">| Identity Provider (IdP v4.8)</span>
+                </span>
+            </div>
+
+            <!-- Indicateur SSL / Niveau de Sécurité -->
+            <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-2 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 text-xs px-3 py-1 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="font-mono font-medium hidden sm:inline">TLS 1.3 / SAML 2.0</span>
+                    <span class="font-mono font-medium sm:hidden">TLS 1.3</span>
+                </div>
+                <button onclick="fillDemoData()" class="text-xs bg-edfYellow/10 text-edfYellow border border-edfYellow/30 hover:bg-edfYellow hover:text-black font-medium px-2.5 py-1 rounded transition-colors flex items-center gap-1" title="Remplissage automatique pour test">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Démo Rapide</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Zone principale -->
+    <main class="flex-1 flex items-center justify-center p-4 md:p-6 relative overflow-hidden">
+        <!-- Arrière-plan décoratif discret -->
+        <div class="absolute inset-0 bg-[radial-gradient(#ffffff08_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none"></div>
+
+        <div class="w-full max-w-lg z-10">
+
+            <!-- ÉCRAN 1 : CONNEXION ET SELECTION MFA -->
+            <div id="step-login" class="bg-edfCard border border-edfBorder/80 rounded-xl p-6 md:p-8 shadow-2xl yellow-glow relative">
+                <!-- En-tête Formulaire -->
+                <div class="text-center mb-6">
+                    <div class="inline-flex p-3 rounded-full bg-edfYellow/10 text-edfYellow border border-edfYellow/20 mb-3">
+                        <i data-lucide="lock" class="w-8 h-8"></i>
+                    </div>
+                    <h1 class="text-2xl font-bold tracking-tight text-white">Authentification GARDIAN</h1>
+                    <p class="text-xs text-slate-400 mt-1">Accès réservé aux agents certifiés & partenaires EDF</p>
+                </div>
+
+                <!-- Notification Message d'erreur -->
+                <div id="login-error" class="hidden mb-4 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-400 text-xs flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-4 h-4 shrink-0"></i>
+                    <span id="login-error-msg">Identifiants incorrects ou session expirée.</span>
+                </div>
+
+                <form id="form-login" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+                    <!-- Champ Identifiant / NNIP -->
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5" for="username">
+                            Identifiant Réseau / NNIP / Email
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                                <i data-lucide="user" class="w-4 h-4"></i>
+                            </span>
+                            <input type="text" id="username" required autocomplete="username"
+                                class="w-full pl-10 pr-4 py-2.5 bg-[#1e2124] border border-edfBorder rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-edfYellow focus:ring-1 focus:ring-edfYellow text-sm transition-all"
+                                placeholder="ex: A891234 ou jean.dupont@edf.fr">
+                        </div>
+                    </div>
+
+                    <!-- Champ Mot de passe -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider" for="password">
+                                Mot de Passe GARDIAN
+                            </label>
+                            <a href="#" onclick="alert('Veuillez contacter le Desk IT EDF au 0800-EDF-HELP.'); return false;" class="text-xs text-edfYellow hover:underline">Oublié ?</a>
+                        </div>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                                <i data-lucide="key-round" class="w-4 h-4"></i>
+                            </span>
+                            <input type="password" id="password" required autocomplete="current-password"
+                                class="w-full pl-10 pr-10 py-2.5 bg-[#1e2124] border border-edfBorder rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-edfYellow focus:ring-1 focus:ring-edfYellow text-sm transition-all"
+                                placeholder="••••••••••••">
+                            <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200">
+                                <i data-lucide="eye" id="eye-icon" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sélection méthode MFA -->
+                    <div class="pt-2">
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                            Méthode Multi-Facteurs (MFA)
+                        </label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <!-- Option OTP SMS / Mail -->
+                            <label class="mfa-option cursor-pointer border border-edfBorder bg-[#1e2124] p-3 rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-edfYellow/50 transition-all text-center">
+                                <input type="radio" name="mfa_type" value="otp" checked class="sr-only peer" onchange="updateMfaSelection()">
+                                <i data-lucide="smartphone" class="w-5 h-5 text-slate-400 peer-checked:text-edfYellow"></i>
+                                <span class="text-[11px] font-medium text-slate-300 peer-checked:text-edfYellow">SMS / Mail</span>
+                            </label>
+
+                            <!-- Option Authenticator -->
+                            <label class="mfa-option cursor-pointer border border-edfBorder bg-[#1e2124] p-3 rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-edfYellow/50 transition-all text-center">
+                                <input type="radio" name="mfa_type" value="totp" class="sr-only peer" onchange="updateMfaSelection()">
+                                <i data-lucide="shield-alert" class="w-5 h-5 text-slate-400 peer-checked:text-edfYellow"></i>
+                                <span class="text-[11px] font-medium text-slate-300 peer-checked:text-edfYellow">App Auth</span>
+                            </label>
+
+                            <!-- Option Certificat Physique -->
+                            <label class="mfa-option cursor-pointer border border-edfBorder bg-[#1e2124] p-3 rounded-lg flex flex-col items-center justify-center gap-1.5 hover:border-edfYellow/50 transition-all text-center">
+                                <input type="radio" name="mfa_type" value="smartcard" class="sr-only peer" onchange="updateMfaSelection()">
+                                <i data-lucide="cpu" class="w-5 h-5 text-slate-400 peer-checked:text-edfYellow"></i>
+                                <span class="text-[11px] font-medium text-slate-300 peer-checked:text-edfYellow">Carte / PKI</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Bouton Soumission -->
+                    <button type="submit" id="btn-login" class="w-full mt-4 bg-edfYellow hover:bg-edfYellowDark text-black font-bold py-3 px-4 rounded-lg shadow-lg hover:shadow-edfYellow/20 transition-all flex items-center justify-center gap-2 group">
+                        <span>S'authentifier avec GARDIAN</span>
+                        <i data-lucide="arrow-right" class="w-4 h-4 group-hover:translate-x-1 transition-transform"></i>
+                    </button>
+                </form>
+
+                <!-- Footer réassurance -->
+                <div class="mt-6 pt-4 border-t border-edfBorder/40 text-center text-[11px] text-slate-400 flex items-center justify-center gap-4">
+                    <span class="flex items-center gap-1"><i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i> AAL3 Certified</span>
+                    <span>•</span>
+                    <span class="flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5 text-edfYellow"></i> Anssi SecNumCloud</span>
+                </div>
+            </div>
+
+            <!-- ÉCRAN 2 : VALIDATION MFA DYNAMIQUE -->
+            <div id="step-mfa" class="hidden bg-edfCard border border-edfBorder/80 rounded-xl p-6 md:p-8 shadow-2xl yellow-glow relative step-transition">
+                <!-- Bouton retour -->
+                <button onclick="goToStep('step-login')" class="absolute top-6 left-6 text-slate-400 hover:text-white transition-colors flex items-center gap-1 text-xs">
+                    <i data-lucide="chevron-left" class="w-4 h-4"></i> Retour
+                </button>
+
+                <div class="text-center mt-2 mb-6">
+                    <div id="mfa-icon-container" class="inline-flex p-3 rounded-full bg-edfYellow/10 text-edfYellow border border-edfYellow/20 mb-3">
+                        <i data-lucide="smartphone" id="mfa-main-icon" class="w-8 h-8"></i>
+                    </div>
+                    <h2 id="mfa-title" class="text-xl font-bold text-white">Vérification de sécurité</h2>
+                    <p id="mfa-subtitle" class="text-xs text-slate-400 mt-1">Un code temporaire a été transmis à votre terminal enregistré.</p>
+                </div>
+
+                <!-- Status simulation (ex: Envoi en cours...) -->
+                <div id="mfa-simulation-status" class="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-300 text-xs flex items-center gap-2">
+                    <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+                    <span id="mfa-status-text">Génération du jeton de sécurité GARDIAN...</span>
+                </div>
+
+                <!-- Formulaire Saisie Code OTP / TOTP -->
+                <form id="form-mfa" onsubmit="handleMfaSubmit(event)" class="space-y-4">
+                    <div id="container-otp-input">
+                        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2 text-center">
+                            Saisir le code à 6 chiffres
+                        </label>
+                        <div class="flex justify-center gap-2" id="otp-digits-inputs">
+                            <input type="text" maxlength="1" class="otp-input w-11 h-12 text-center text-xl font-bold bg-[#1e2124] border border-edfBorder rounded-lg focus:border-edfYellow focus:ring-1 focus:ring-edfYellow focus:outline-none" required>
+                            <input type="text" maxlength="1" class="otp-input w-11 h-12 text-center text-xl font-bold bg-[#1e2124] border border-edfBorder rounded-lg focus:border-edfYellow focus:ring-1 focus:ring-edfYellow focus:outline-none" required>
+                            <input type="text" maxlength="1" class="otp-input w-11 h-12 text-center text-xl font-bold bg-[#1e2124] border border-edfBorder rounded-lg focus:border-edfYellow focus:ring-1 focus:ring-edfYellow focus:outline-none" required>
+                            <input type="text" maxlength="1" class="otp-input w-11 h-12 text-center text-xl font-bold bg-[#1e2124] border border-edfBorder rounded-lg focus:border-edfYellow focus:ring-1 focus:ring-edfYellow focus:outline-none" required>
+                            <input type="text" maxlength="1" class="otp-input w-11 h-12 text-center text-xl font-bold bg-[#1e2124] border border-edfBorder rounded-lg focus:border-edfYellow focus:ring-1 focus:ring-edfYellow focus:outline-none" required>
+                            <input type="text" maxlength="1" class="otp-input w-11 h-12 text-center text-xl font-bold bg-[#1e2124] border border-edfBorder rounded-lg focus:border-edfYellow focus:ring-1 focus:ring-edfYellow focus:outline-none" required>
+                        </div>
+                    </div>
+
+                    <!-- Mode Certificat Physique / Smartcard (Affiché dynamiquement) -->
+                    <div id="container-smartcard-input" class="hidden text-center py-4 bg-[#1e2124] rounded-lg border border-edfBorder p-4">
+                        <div class="pulse-subtle inline-block mb-3">
+                            <i data-lucide="badge-check" class="w-12 h-12 text-edfYellow mx-auto"></i>
+                        </div>
+                        <p class="text-sm font-semibold text-slate-200">Certificat PKI EDF Détecté</p>
+                        <p class="text-xs text-slate-400 mt-1 font-mono">CN=DUPONT Jean (A891234), OU=AGENT-SI-EDF, O=EDF SA</p>
+                        <div class="mt-4 text-left">
+                            <label class="block text-[11px] font-semibold text-slate-400 uppercase mb-1">Code PIN Carte Agent</label>
+                            <input type="password" id="smartcard-pin" placeholder="****" maxlength="8" class="w-full px-3 py-2 bg-edfCard border border-edfBorder rounded text-center text-sm font-mono tracking-widest focus:border-edfYellow focus:outline-none">
+                        </div>
+                    </div>
+
+                    <!-- Compte à rebours Jeton -->
+                    <div class="flex items-center justify-between text-xs text-slate-400 pt-2">
+                        <span>Expiration du jeton :</span>
+                        <span id="mfa-timer" class="font-mono text-edfYellow font-bold">02:59</span>
+                    </div>
+
+                    <!-- Validation -->
+                    <button type="submit" id="btn-validate-mfa" class="w-full bg-edfYellow hover:bg-edfYellowDark text-black font-bold py-3 px-4 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                        <span>Valider la session GARDIAN</span>
+                    </button>
+                </form>
+
+                <!-- Renvoyer OTP -->
+                <div class="mt-4 text-center">
+                    <button onclick="resendMfaCode()" id="btn-resend" class="text-xs text-slate-400 hover:text-edfYellow underline disabled:opacity-50">
+                        Renvoyer un nouveau code OTP
+                    </button>
+                </div>
+            </div>
+
+            <!-- ÉCRAN 3 : TABLEAU DE BORD ACCÈS AUTORISÉ -->
+            <div id="step-dashboard" class="hidden bg-edfCard border border-edfBorder/80 rounded-xl p-6 md:p-8 shadow-2xl yellow-glow step-transition">
+                <div class="flex items-center justify-between border-b border-edfBorder/60 pb-4 mb-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-edfYellow text-black font-extrabold flex items-center justify-center text-lg">
+                            JD
+                        </div>
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-1.5">
+                                <span id="user-display-name">Jean Dupont</span>
+                                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400 inline"></i>
+                            </h2>
+                            <p class="text-xs text-slate-400">Agent Réseau EDF • ID: <span id="user-display-id" class="font-mono">A891234</span></p>
+                        </div>
+                    </div>
+                    <span class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Session Active
+                    </span>
+                </div>
+
+                <!-- Métriques de sécurité session -->
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="bg-[#1e2124] p-3 rounded-lg border border-edfBorder">
+                        <span class="text-[10px] uppercase font-semibold text-slate-400 block mb-1">Niveau d'assurance (AAL)</span>
+                        <div class="text-xs font-bold text-slate-200 flex items-center gap-1">
+                            <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-edfYellow"></i>
+                            <span>Niveau 3 (AAL3 - Fort)</span>
+                        </div>
+                    </div>
+                    <div class="bg-[#1e2124] p-3 rounded-lg border border-edfBorder">
+                        <span class="text-[10px] uppercase font-semibold text-slate-400 block mb-1">Jeton Émis</span>
+                        <div class="text-xs font-bold text-slate-200 flex items-center gap-1">
+                            <i data-lucide="file-check" class="w-3.5 h-3.5 text-blue-400"></i>
+                            <span>OIDC / SAML 2.0</span>
+                        </div>
+                    </div>
+                    <div class="bg-[#1e2124] p-3 rounded-lg border border-edfBorder">
+                        <span class="text-[10px] uppercase font-semibold text-slate-400 block mb-1">Adresse IP Source</span>
+                        <div class="text-xs font-mono font-bold text-slate-200">10.194.88.102 (VPN EDF)</div>
+                    </div>
+                    <div class="bg-[#1e2124] p-3 rounded-lg border border-edfBorder">
+                        <span class="text-[10px] uppercase font-semibold text-slate-400 block mb-1">Expiration Session</span>
+                        <div id="session-expiration-timer" class="text-xs font-mono font-bold text-edfYellow">07h 59m 59s</div>
+                    </div>
+                </div>
+
+                <!-- Applications Autorisées (Simulées) -->
+                <div class="mb-6">
+                    <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+                        <span>Applications EDF Disponibles</span>
+                        <span class="text-[10px] text-slate-500 font-normal">SSO Connecté</span>
+                    </h3>
+                    <div class="space-y-2">
+                        <a href="#" onclick="alert('Redirection vers le Portail Métier EDF...'); return false;" class="flex items-center justify-between p-2.5 bg-[#1e2124] hover:bg-edfGray/50 border border-edfBorder rounded-lg transition-colors group">
+                            <div class="flex items-center space-x-3">
+                                <div class="p-2 bg-blue-500/10 text-blue-400 rounded">
+                                    <i data-lucide="zap" class="w-4 h-4"></i>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-200 group-hover:text-edfYellow transition-colors">Portail Métier Distribution (Enedis/EDF)</p>
+                                    <p class="text-[10px] text-slate-400">Gestion des interventions & réseaux</p>
+                                </div>
+                            </div>
+                            <i data-lucide="external-link" class="w-4 h-4 text-slate-500 group-hover:text-slate-300"></i>
+                        </a>
+
+                        <a href="#" onclick="alert('Redirection vers la Console Nucléaire & Hydraulique...'); return false;" class="flex items-center justify-between p-2.5 bg-[#1e2124] hover:bg-edfGray/50 border border-edfBorder rounded-lg transition-colors group">
+                            <div class="flex items-center space-x-3">
+                                <div class="p-2 bg-amber-500/10 text-amber-400 rounded">
+                                    <i data-lucide="activity" class="w-4 h-4"></i>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-200 group-hover:text-edfYellow transition-colors">G-PROD Superviseur</p>
+                                    <p class="text-[10px] text-slate-400">Suivi de production en temps réel</p>
+                                </div>
+                            </div>
+                            <i data-lucide="external-link" class="w-4 h-4 text-slate-500 group-hover:text-slate-300"></i>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Bouton Déconnexion -->
+                <button onclick="logout()" class="w-full bg-rose-600/10 hover:bg-rose-600 border border-rose-500/30 text-rose-400 hover:text-white font-semibold py-2.5 px-4 rounded-lg transition-all text-xs flex items-center justify-center gap-2">
+                    <i data-lucide="log-out" class="w-4 h-4"></i>
+                    <span>Révoquer la Session GARDIAN</span>
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Pied de page officiel -->
+    <footer class="bg-[#181a1d] border-t border-edfBorder/60 py-3 px-4 text-center text-xs text-slate-500">
+        <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+                © 2026 Électricité de France (EDF) S.A. - Direction des Systèmes d'Information
+            </div>
+            <div class="flex items-center space-x-4">
+                <a href="#" onclick="alert('Service de support GARDIAN disponible 24/7 pour les agents.'); return false;" class="hover:text-slate-300 transition-colors">Assistance GARDIAN</a>
+                <span>•</span>
+                <a href="#" onclick="alert('Politique d\'accès et charte informatique EDF v12.'); return false;" class="hover:text-slate-300 transition-colors">Charte Informatique</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- JS Logic Simulation -->
+    <script>
+        // State variables
+        let selectedMfaType = 'otp';
+        let generatedOtp = '123456';
+        let countdownTimer = null;
+        let timerSeconds = 179;
+
+        // Initialize Lucide Icons
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            setupOtpInputs();
+        });
+
+        // Toggle visibility password
+        function togglePasswordVisibility() {
+            const pwdInput = document.getElementById('password');
+            const eyeIcon = document.getElementById('eye-icon');
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                eyeIcon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                pwdInput.type = 'password';
+                eyeIcon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        }
+
+        // Quick Auto-fill for Demonstration
+        function fillDemoData() {
+            document.getElementById('username').value = 'jean.dupont@edf.fr';
+            document.getElementById('password').value = 'EdfPass2026!Secured';
+            // Hide any active error
+            document.getElementById('login-error').classList.add('hidden');
+        }
+
+        // Navigation between steps
+        function goToStep(stepId) {
+            ['step-login', 'step-mfa', 'step-dashboard'].forEach(id => {
+                const el = document.getElementById(id);
+                if (id === stepId) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+        }
+
+        // Change MFA Option selection
+        function updateMfaSelection() {
+            const radios = document.getElementsByName('mfa_type');
+            for (const radio of radios) {
+                if (radio.checked) {
+                    selectedMfaType = radio.value;
+                    break;
+                }
+            }
+        }
+
+        // Handle Step 1 Login Submission
+        function handleLoginSubmit(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            const pwd = document.getElementById('password').value;
+
+            if (!username || !pwd) {
+                showLoginError("Veuillez renseigner votre identifiant et votre mot de passe.");
+                return;
+            }
+
+            // Update user interface
+            const userDisp = username.includes('@') ? username.split('@')[0].replace('.', ' ') : username;
+            document.getElementById('user-display-name').textContent = capitalizeWords(userDisp);
+            document.getElementById('user-display-id').textContent = username.split('@')[0].toUpperCase();
+
+            // Prepare MFA view based on selection
+            prepareMfaStep();
+            goToStep('step-mfa');
+        }
+
+        function showLoginError(msg) {
+            const errDiv = document.getElementById('login-error');
+            const errText = document.getElementById('login-error-msg');
+            errText.textContent = msg;
+            errDiv.classList.remove('hidden');
+        }
+
+        // Capitalize names
+        function capitalizeWords(str) {
+            return str.replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        // Prepare MFA step text and components
+        function prepareMfaStep() {
+            const titleEl = document.getElementById('mfa-title');
+            const subTitleEl = document.getElementById('mfa-subtitle');
+            const statusText = document.getElementById('mfa-status-text');
+            const mainIcon = document.getElementById('mfa-main-icon');
+            const otpContainer = document.getElementById('container-otp-input');
+            const smartcardContainer = document.getElementById('container-smartcard-input');
+
+            // Generate random 6-digit OTP for demo
+            generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+            if (selectedMfaType === 'otp') {
+                otpContainer.classList.remove('hidden');
+                smartcardContainer.classList.add('hidden');
+                mainIcon.setAttribute('data-lucide', 'smartphone');
+                titleEl.textContent = 'Validation par SMS / Courriel';
+                subTitleEl.textContent = 'Un code à 6 chiffres a été envoyé à votre mobile enregistré (* ** ** 42).';
+                statusText.textContent = `Code envoyé ! (Code de démonstration: ${generatedOtp})`;
+            } else if (selectedMfaType === 'totp') {
+                otpContainer.classList.remove('hidden');
+                smartcardContainer.classList.add('hidden');
+                mainIcon.setAttribute('data-lucide', 'shield-alert');
+                titleEl.textContent = 'Application Authentificatrice (TOTP)';
+                subTitleEl.textContent = 'Ouvrez votre application (Google/Microsoft Auth) et saisissez le code généré pour GARDIAN.';
+                statusText.textContent = `Jeton TOTP attendu (Entrez n'importe quel code à 6 chiffres ou ${generatedOtp})`;
+            } else if (selectedMfaType === 'smartcard') {
+                otpContainer.classList.add('hidden');
+                smartcardContainer.classList.remove('hidden');
+                mainIcon.setAttribute('data-lucide', 'cpu');
+                titleEl.textContent = 'Authentification par Certificat PKI';
+                subTitleEl.textContent = 'Vérification de la carte à puce insérée dans le lecteur sécurisé.';
+                statusText.textContent = 'Certificat matériel validé. Saisissez votre code PIN Agent.';
+            }
+
+            lucide.createIcons();
+            startCountdown();
+            clearOtpInputs();
+        }
+
+        // OTP Input Auto-focus logic
+        function setupOtpInputs() {
+            const inputs = document.querySelectorAll('.otp-input');
+            inputs.forEach((input, index) => {
+                input.addEventListener('input', (e) => {
+                    if (e.target.value.length === 1 && index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                    }
+                });
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                        inputs[index - 1].focus();
+                    }
+                });
+            });
+        }
+
+        function clearOtpInputs() {
+            const inputs = document.querySelectorAll('.otp-input');
+            inputs.forEach(input => input.value = '');
+            if (inputs.length > 0 && selectedMfaType !== 'smartcard') {
+                setTimeout(() => inputs[0].focus(), 100);
+            }
+        }
+
+        // Timer Countdown
+        function startCountdown() {
+            clearInterval(countdownTimer);
+            timerSeconds = 179;
+            updateTimerDisplay();
+
+            countdownTimer = setInterval(() => {
+                timerSeconds--;
+                updateTimerDisplay();
+
+                if (timerSeconds <= 0) {
+                    clearInterval(countdownTimer);
+                    alert("Le délai d'authentification MFA a expiré. Veuillez réessayer.");
+                    goToStep('step-login');
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const mins = Math.floor(timerSeconds / 60);
+            const secs = timerSeconds % 60;
+            const timerEl = document.getElementById('mfa-timer');
+            if (timerEl) {
+                timerEl.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+        }
+
+        function resendMfaCode() {
+            generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            document.getElementById('mfa-status-text').textContent = `Nouveau code généré : ${generatedOtp}`;
+            startCountdown();
+            clearOtpInputs();
+        }
+
+        // Handle Step 2 MFA Validation
+        function handleMfaSubmit(e) {
+            e.preventDefault();
+
+            if (selectedMfaType === 'smartcard') {
+                const pin = document.getElementById('smartcard-pin').value;
+                if (!pin || pin.length < 4) {
+                    alert('Veuillez entrer un code PIN valide pour votre carte d\'agent.');
+                    return;
+                }
+            } else {
+                const inputs = document.querySelectorAll('.otp-input');
+                let enteredOtp = '';
+                inputs.forEach(input => enteredOtp += input.value);
+
+                if (enteredOtp.length < 6) {
+                    alert('Veuillez saisir le code complet à 6 chiffres.');
+                    return;
+                }
+            }
+
+            // Simulate MFA verification delay
+            const btn = document.getElementById('btn-validate-mfa');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Verification GARDIAN...`;
+            btn.disabled = true;
+            lucide.createIcons();
+
+            setTimeout(() => {
+                btn.innerHTML = originalContent;
+                btn.disabled = false;
+                clearInterval(countdownTimer);
+                goToStep('step-dashboard');
+            }, 1200);
+        }
+
+        // Logout
+        function logout() {
+            if (confirm("Voulez-vous vraiment vous déconnecter de GARDIAN et révoquer votre session SSO ?")) {
+                goToStep('step-login');
+                document.getElementById('form-login').reset();
+                document.getElementById('login-error').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
